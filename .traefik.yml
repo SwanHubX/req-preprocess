@@ -2,3 +2,6 @@ displayName: Request Preprocessing
 summary: 请求预处理中间件，用于处理JWT凭证和session
 type: middleware
 import: github.com/SwanHubX/req-preprocess
+testData:
+  AuthUrl: ""
+  Secret: ""
