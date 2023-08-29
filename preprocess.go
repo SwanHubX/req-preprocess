@@ -157,5 +157,5 @@ func verifyJWT(jwt JWT, key *rsa.PublicKey) bool {
 
 // 验证token是否过期。true代表已过期
 func verifyExpires(exp int64) bool {
-	return exp < time.Now().UnixNano()/1e9
+	return exp < time.Now().Unix()
 }
