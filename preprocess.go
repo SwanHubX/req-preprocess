@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -34,13 +35,6 @@ type Preprocess struct {
 	name      string
 	url       string
 	publicKey *rsa.PublicKey
-}
-
-// Response 响应对象
-type Response struct {
-	Code    int             `json:"code"`
-	Message string          `json:"message"`
-	Data    json.RawMessage `json:"data"`
 }
 
 // JWT JWT对象格式
@@ -71,7 +65,7 @@ func (p *Preprocess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 /*
-将会话id转发给认证接口，用于检索会话信息传递给后面的真实接口
+将会话id转发给认证接口，用于检索会话信息传递给后面的业务接口
 会话id保留在cookie中的sid字段中
 */
 func (p *Preprocess) forwardAuth(req *http.Request) {
@@ -89,12 +83,12 @@ func (p *Preprocess) forwardAuth(req *http.Request) {
 		return
 	}
 	defer res.Body.Close()
-	// 处理响应，转化为JSON
-	var result Response
-	if err := json.NewDecoder(res.Body).Decode(&result); err != nil || result.Code != 0 {
+	// 读取响应体
+	result, err := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || err != nil {
 		return
 	}
-	req.Header.Add("Payload", string(result.Data))
+	req.Header.Add("Payload", string(result))
 }
 
 // ----- JWT相关 -----
