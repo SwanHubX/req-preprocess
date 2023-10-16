@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math"
+	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -59,8 +61,12 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (p *Preprocess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	p.forwardAuth(req) // 对会话进行转发验证
-	p.parseJWT(req)    // 对携带JWT凭证的请求进行解析
+	// 删除可能的payload头
+	req.Header.Del("payload")
+
+	p.forwardAuth(req)    // 对会话进行转发验证
+	p.parseJWT(req)       // 对携带JWT凭证的请求进行解析
+	p.addTraceId(req, rw) // 对请求添加traceId
 	p.next.ServeHTTP(rw, req)
 }
 
@@ -88,7 +94,7 @@ func (p *Preprocess) forwardAuth(req *http.Request) {
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil || result.Code != 0 {
 		return
 	}
-	req.Header.Add("payload", string(result.Data))
+	req.Header.Add("Payload", string(result.Data))
 }
 
 // ----- JWT相关 -----
@@ -118,7 +124,7 @@ func (p *Preprocess) parseJWT(req *http.Request) {
 		if verifyExpires(exp) {
 			return
 		}
-		req.Header.Add("payload", string(payload))
+		req.Header.Add("Payload", string(payload))
 	}
 }
 
@@ -158,4 +164,21 @@ func verifyJWT(jwt JWT, key *rsa.PublicKey) bool {
 // 验证token是否过期。true代表已过期
 func verifyExpires(exp int64) bool {
 	return exp < time.Now().Unix()
+}
+
+// ----- TraceId -----
+
+func (p *Preprocess) addTraceId(req *http.Request, rw http.ResponseWriter) {
+	id := uuid()
+	req.Header.Set("TraceId", id)
+	rw.Header().Add("TraceId", id)
+}
+
+/*
+生成16位随机id。前8位为当前时间戳（ms）转化为36进制，后8位是随机字符
+*/
+func uuid() string {
+	currentTime := time.Now().UnixMilli()
+	randomStr := strconv.FormatInt(int64(rand.Int()), 36)
+	return strconv.FormatInt(currentTime, 36) + randomStr[0:8]
 }
