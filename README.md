@@ -1,17 +1,20 @@
-# preprocess-middleware
+## preprocess-middleware
 
-为Traefik网关开发的一个请求预处理中间件插件
+为 [Traefik](https://traefik.io/traefik/) 网关开发的一个请求预处理中间件插件，主要用于集中认证。不过与其它的集中认证插件不同的是该插件不会决定请求是否有权到达后面的实际业务逻辑层，只会将其携带的凭证解析成有效负载，如果凭证无效则为空，然后将裁决权交给后续的逻辑层。
 
-## 功能
+### 功能
 
-- 进行JWT解码：也就是说如果`header`字段`Authorization`中包含`Bearer token`则进行解码验证，验证错误并不响应错误，验证成功则传递给后面真正的服务。只有后面的业务服务才有权限控制是否需要认证。
-- 获取会话信息：如果cookie中包含会话ID（字段`sid`），则需要携带会话id向认证服务发起请求，然后将获取的会话信息传递给后面的接口，同样的获取成功或者失败都传递给后面的业务服务，不干预响应。
+- 处理会话信息：如果 cookie 中包含会话ID（字段为 `sid`），则会将会话ID转发给认证服务获取对应的身份信息，然后传递给业务逻辑层。
 
-## 使用
+- 解析 JWT 凭证：如果 `header` 中包含字段 `Authorization`，且符合 [`Bearer <token>`](https://swagger.io/docs/specification/authentication/bearer-authentication/) 格式 ，则会对其进行 JWT 解码，然后传递给业务逻辑层。
 
-> 主要介绍在本地开发模式下的使用
+上述功能都不会干预响应，而是将解析的身份信息放置在请求头 `payload` 上，然后逻辑层根据请求头是否含有 `payload` 参数来判断请求是否携带有效凭证。
 
-如果在docker中启动Traefik，我们需要将插件放在`/plugins-local`目录下，例如：
+### 使用
+
+> 主要介绍在本地开发模式下的使用，参考自：[middleware demo plugin](https://github.com/traefik/plugindemo)
+
+如果在docker中启动Traefik，我们需要将插件放在 `/plugins-local` 目录下，例如：
 
 ```yaml
 version: '3'
@@ -25,14 +28,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./conf:/etc/traefik
-      - /Users/jqs/Desktop/Projects/BlackSwanXDU/req-preprocess:/plugins-local/src/github.com/SwanHubX/req-preprocess
+      - ./plugins/req-preprocess:/plugins-local/src/github.com/SwanHubX/req-preprocess
 ```
 
-> 则插件挂载到容器中的`/plugins-local/src/github.com/SwanHubX/req-preprocess`下
->
-> 注意路径应该安装插件配置文件`.traefik.yml`的`import`字段定义
+> 插件的路径为 `.traefik.yml` 文件中的 `import` 字段定义，为 `github.com/SwanHubX/req-preprocess`
 
-在Traefik配置中引入插件：
+在 Traefik 配置中引入插件：
 
 ```yaml
 experimental:
@@ -41,19 +42,18 @@ experimental:
       moduleName: github.com/SwanHubX/req-preprocess
 ```
 
-然后就可以设置中间件：
+在中间件中使用插件：
 
 ```yaml
 http:
   routers:
-    my-router:
+    to-whoami:
       rule: "PathPrefix(`/api`)"
-      service: test
-      priority: 0
+      service: whoami
       middlewares:
         - "preprocess"
   services:
-    test:
+    whoami:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3000/"
@@ -75,18 +75,7 @@ http:
 
 ```
 
-## 配置
+### 配置
 
-| Key     | 说明    |
-| ------- | ------- |
-| AuthUrl | 认证URL |
-| Key     | JWT公钥 |
-
-## Q&A
-
-### 1. 为什么不直接在插件中访问Redis
-
-获取会话信息实际上就是在Redis数据库中检索对应会话id的值然后传递给后面的接口，在插件中直接访问Redis似乎路径更短。
-
-刚开始确实是这么考虑的，但是逐渐发现有一些问题。连接Redis是有一个连接池的，如果每次请求都发起一个连接对性能影响是很大的，但是不太明白在插件中如何初始化并保留连接。而且就算可以保留连接，连接断开后重连也是一个很难处理的问题。同时编写一个单独的接口还能记录查询日志。
-
+- `AuthUrl`（可选）：转发的认证接口
+- `Key`（可选）：RSA公钥
