@@ -114,7 +114,7 @@ func (p *Preprocess) parseJWT(req *http.Request) {
 		}
 		// 3. 验证jwt凭证是否过期
 		var v map[string]interface{}
-		if err = json.Unmarshal(payload, &v); err != nil {
+		if err = json.Unmarshal(payload, &v); err != nil || v["exp"] == nil {
 			return
 		}
 		exp := int64(math.Floor(v["exp"].(float64)))
