@@ -1,0 +1,15 @@
+providers:
+  docker: {}
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+accessLog: {}
+api:
+  insecure: true
+  dashboard: true
+
+experimental:
+  localPlugins:
+    rpp:
+      moduleName: github.com/SwanHubX/req-preprocess
