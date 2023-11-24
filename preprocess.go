@@ -45,7 +45,10 @@ type JWT struct {
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	publicKey := loadPublicKey(config.Key) // 加载pem公钥
+	var publicKey *rsa.PublicKey = nil
+	if config.Key != "" {
+		publicKey = loadPublicKey(config.Key) // 加载pem公钥
+	}
 	return &Preprocess{
 		next:      next,
 		name:      name,
