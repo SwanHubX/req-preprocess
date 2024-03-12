@@ -8,6 +8,8 @@
 
 - 解析 JWT 凭证：如果 `header` 中包含字段 `Authorization`，且符合 [`Bearer <token>`](https://swagger.io/docs/specification/authentication/bearer-authentication/) 格式 ，则会对其进行 JWT 解码，然后传递给业务逻辑层。
 
+- 根据特定的Cookie记录重定向。解决 [SwanHubX/habitat#121](https://github.com/SwanHubX/habitat/issues/121)
+
 上述功能都不会干预响应，而是将解析的身份信息放置在请求头 `payload` 上，然后逻辑层根据请求头是否含有 `payload` 参数来判断请求是否携带有效凭证。
 
 ### 使用
@@ -79,3 +81,4 @@ http:
 
 - `AuthUrl`（可选）：转发的认证接口
 - `Key`（可选）：RSA公钥
+- `Mark`（可选）：特定的标识。例如Mark设置为 `ht-`，Cookie中有一个Key为 `ht-iop`，那么重定向时将添加路径前缀 `/iop`

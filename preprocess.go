@@ -66,10 +66,17 @@ func (p *Preprocess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if p.mark != "" && p.redirect(req, rw) {
 		return
 	}
-	// 删除可能的payload头
-	req.Header.Del("payload")
-	p.forwardAuth(req)    // 对会话进行转发验证
-	p.parseJWT(req)       // 对携带JWT凭证的请求进行解析
+	if p.url != "" || p.publicKey != nil {
+		// 删除可能存在的payload头
+		req.Header.Del("payload")
+	}
+	if p.url != "" {
+		// 对会话进行转发认证
+		p.forwardAuth(req)
+	} else if p.publicKey != nil {
+		// 对携带JWT凭证的请求进行解析
+		p.parseJWT(req)
+	}
 	p.addTraceId(req, rw) // 对请求添加traceId
 	p.next.ServeHTTP(rw, req)
 }
