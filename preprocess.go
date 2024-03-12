@@ -203,7 +203,7 @@ func (p *Preprocess) redirect(req *http.Request, rw http.ResponseWriter) bool {
 	}
 	if key != "" {
 		id := strings.TrimPrefix(key, p.mark)
-		rw.Header().Set("Location", fmt.Sprintf("/%s", id+req.URL.Path))
+		rw.Header().Set("Location", fmt.Sprintf("/%s", id+req.RequestURI))
 		rw.WriteHeader(http.StatusPermanentRedirect)
 		return true
 	}
