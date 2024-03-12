@@ -204,7 +204,7 @@ func (p *Preprocess) redirect(req *http.Request, rw http.ResponseWriter) bool {
 	if key != "" {
 		id := strings.TrimPrefix(key, p.mark)
 		rw.Header().Set("Location", fmt.Sprintf("/%s", id+req.URL.Path))
-		rw.WriteHeader(http.StatusMovedPermanently)
+		rw.WriteHeader(http.StatusPermanentRedirect)
 		return true
 	}
 	return false
