@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math"
 	"math/rand"
@@ -21,12 +22,14 @@ import (
 type Config struct {
 	AuthUrl string // 认证服务url
 	Key     string // JWT公钥
+	Mark    string // 标志前缀
 }
 
 func CreateConfig() *Config {
 	return &Config{
 		AuthUrl: "",
 		Key:     "",
+		Mark:    "",
 	}
 }
 
@@ -35,6 +38,7 @@ type Preprocess struct {
 	name      string
 	url       string
 	publicKey *rsa.PublicKey
+	mark      string
 }
 
 // JWT JWT对象格式
@@ -54,13 +58,16 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		name:      name,
 		url:       config.AuthUrl,
 		publicKey: publicKey,
+		mark:      config.Mark,
 	}, nil
 }
 
 func (p *Preprocess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if p.mark != "" && p.redirect(req, rw) {
+		return
+	}
 	// 删除可能的payload头
 	req.Header.Del("payload")
-
 	p.forwardAuth(req)    // 对会话进行转发验证
 	p.parseJWT(req)       // 对携带JWT凭证的请求进行解析
 	p.addTraceId(req, rw) // 对请求添加traceId
@@ -85,7 +92,12 @@ func (p *Preprocess) forwardAuth(req *http.Request) {
 	if err != nil {
 		return
 	}
-	defer res.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err = Body.Close()
+		if err != nil {
+			return
+		}
+	}(res.Body)
 	// 读取响应体
 	result, err := io.ReadAll(res.Body)
 	if res.StatusCode != 200 || err != nil {
@@ -178,4 +190,22 @@ func uuid() string {
 	currentTime := time.Now().UnixMilli()
 	randomStr := strconv.FormatInt(int64(rand.Int()), 36)
 	return strconv.FormatInt(currentTime, 36) + randomStr[0:8]
+}
+
+// 重定向到特定的后端服务
+func (p *Preprocess) redirect(req *http.Request, rw http.ResponseWriter) bool {
+	key := ""
+	for _, cookie := range req.Cookies() {
+		if strings.HasPrefix(cookie.Name, p.mark) {
+			key = cookie.Name
+			break
+		}
+	}
+	if key != "" {
+		id := strings.TrimPrefix(key, p.mark)
+		rw.Header().Set("Location", fmt.Sprintf("/%s", id+req.URL.Path))
+		rw.WriteHeader(http.StatusMovedPermanently)
+		return true
+	}
+	return false
 }
