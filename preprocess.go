@@ -83,18 +83,32 @@ func (p *Preprocess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 /*
 将会话id转发给认证接口，用于检索会话信息传递给后面的业务接口
-会话id保留在cookie中的sid字段中
+会话id保留在 cookie中的sid字段 和 请求头中的X-SID字段 中
 */
 func (p *Preprocess) forwardAuth(req *http.Request) {
 	sid, err := req.Cookie("sid")
 	if err != nil {
 		return
 	}
+
+	// 如果请求头中携带了sid，则以请求头中的为准
+	xSid := req.Header.Get("X-SID")
+	if xSid != "" {
+		sid = &http.Cookie{
+			Name:  "sid",
+			Value: xSid,
+		}
+	}
+
 	fReq, err := http.NewRequest("GET", p.url, nil)
 	if err != nil {
 		return
 	}
 	fReq.AddCookie(sid) // 携带会话id
+
+	// 请求头中也携带会话id
+	fReq.Header.Add("X-SID", sid.Value)
+
 	res, err := http.DefaultClient.Do(fReq)
 	if err != nil {
 		return
