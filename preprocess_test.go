@@ -359,3 +359,181 @@ func TestServeHTTP_ByTraceId(t *testing.T) {
 		t.Error("TraceId 头应该在响应中设置")
 	}
 }
+
+func TestForwardAuth_CookieSid(t *testing.T) {
+	// 创建一个测试服务器来模拟认证服务
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 检查是否正确接收到了 sid
+		sid, err := r.Cookie("sid")
+		if err != nil {
+			t.Errorf("认证服务未收到 sid cookie: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if sid.Value != "test-session-id-123" {
+			t.Errorf("期望 sid 为 'test-session-id-123', 但实际为 '%s'", sid.Value)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// 返回模拟的认证结果
+		w.WriteHeader(http.StatusOK)
+		// 随便返回一点 看看payload有没有正确设置
+		w.Write([]byte(`{"userId":"12345","username":"testuser"}`))
+	}))
+	defer authServer.Close()
+
+	// 创建 Preprocess 实例
+	config := &Config{
+		AuthUrl: authServer.URL,
+	}
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 检查是否正确设置了 Payload 头
+		payload := r.Header.Get("Payload")
+		if payload == "" {
+			t.Error("Payload 头应该被设置")
+		}
+		if payload != `{"userId":"12345","username":"testuser"}` {
+			t.Errorf("Payload 头内容错误: %s", payload)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler, err := New(context.Background(), nextHandler, config, "test")
+	if err != nil {
+		t.Fatalf("创建 Preprocess 处理器失败: %v", err)
+	}
+
+	// 创建带有 sid cookie 的 HTTP 请求
+	req, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatalf("创建请求失败: %v", err)
+	}
+
+	// 添加 sid cookie
+	req.AddCookie(&http.Cookie{
+		Name:  "sid",
+		Value: "test-session-id-123",
+	})
+
+	rw := httptest.NewRecorder()
+
+	// 处理请求
+	handler.ServeHTTP(rw, req)
+
+	// 检查响应状态码
+	if status := rw.Code; status != http.StatusOK {
+		t.Errorf("处理器错误: 返回 %v, 期望 %v", status, http.StatusOK)
+	}
+}
+
+func TestForwardAuth_HeaderXSid(t *testing.T) {
+	// 创建一个测试服务器来模拟认证服务
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 检查是否正确使用 X-SID 而不是 cookie 中的 sid
+		xSid := r.Header.Get("X-SID")
+		if xSid != "header-session-id-456" {
+			t.Errorf("期望 X-SID 为 'header-session-id-456', 但实际为 '%s'", xSid)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// 返回模拟的认证结果
+		w.WriteHeader(http.StatusOK)
+		// 随便返回一点 看看payload有没有正确设置
+		w.Write([]byte(`{"userId":"67890","username":"headeruser"}`))
+	}))
+	defer authServer.Close()
+
+	// 创建 Preprocess 实例
+	config := &Config{
+		AuthUrl: authServer.URL,
+	}
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 检查是否正确设置了 Payload 头
+		payload := r.Header.Get("Payload")
+		if payload == "" {
+			t.Error("Payload 头应该被设置")
+		}
+		if payload != `{"userId":"67890","username":"headeruser"}` {
+			t.Errorf("Payload 头内容错误: %s", payload)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler, err := New(context.Background(), nextHandler, config, "test")
+	if err != nil {
+		t.Fatalf("创建 Preprocess 处理器失败: %v", err)
+	}
+
+	// 创建 HTTP 请求，同时设置 cookie 和请求头
+	req, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatalf("创建请求失败: %v", err)
+	}
+
+	// 添加 sid cookie 但不应该被使用
+	req.AddCookie(&http.Cookie{
+		Name:  "sid",
+		Value: "cookie-session-id-123",
+	})
+
+	// 设置 X-SID 请求头 应当使用
+	req.Header.Set("X-SID", "header-session-id-456")
+
+	rw := httptest.NewRecorder()
+
+	// 处理请求
+	handler.ServeHTTP(rw, req)
+
+	// 检查响应状态码
+	if status := rw.Code; status != http.StatusOK {
+		t.Errorf("处理器错误: 返回 %v, 期望 %v", status, http.StatusOK)
+	}
+}
+
+func TestForwardAuth_NoSid(t *testing.T) {
+	// 创建一个测试服务器来模拟认证服务
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 这个测试不应该调用认证服务
+		// 就是没有 sid 就不应该转发
+		t.Error("不应该调用认证服务，因为请求中没有 sid")
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer authServer.Close()
+
+	// 创建 Preprocess 实例
+	config := &Config{
+		AuthUrl: authServer.URL,
+	}
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 检查是否没有设置 Payload 头
+		payload := r.Header.Get("Payload")
+		if payload != "" {
+			t.Error("Payload 头不应该被设置，因为没有提供 sid")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler, err := New(context.Background(), nextHandler, config, "test")
+	if err != nil {
+		t.Fatalf("创建 Preprocess 处理器失败: %v", err)
+	}
+
+	// 创建 HTTP 请求，不提供 sid
+	req, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatalf("创建请求失败: %v", err)
+	}
+
+	rw := httptest.NewRecorder()
+
+	// 处理请求
+	handler.ServeHTTP(rw, req)
+
+	// 检查响应状态码
+	if status := rw.Code; status != http.StatusOK {
+		t.Errorf("处理器错误: 返回 %v, 期望 %v", status, http.StatusOK)
+	}
+}
