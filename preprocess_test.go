@@ -360,6 +360,7 @@ func TestServeHTTP_ByTraceId(t *testing.T) {
 	}
 }
 
+// 测试通过 Cookie 中的 sid 进行认证
 func TestForwardAuth_CookieSid(t *testing.T) {
 	// 创建一个测试服务器来模拟认证服务
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -427,6 +428,7 @@ func TestForwardAuth_CookieSid(t *testing.T) {
 	}
 }
 
+// 测试通过请求头中的 X-SID 进行认证
 func TestForwardAuth_HeaderXSid(t *testing.T) {
 	// 创建一个测试服务器来模拟认证服务
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -492,6 +494,7 @@ func TestForwardAuth_HeaderXSid(t *testing.T) {
 	}
 }
 
+// 测试没有 sid 时的行为
 func TestForwardAuth_NoSid(t *testing.T) {
 	// 创建一个测试服务器来模拟认证服务
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
