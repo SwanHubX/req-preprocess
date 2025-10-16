@@ -4,7 +4,7 @@
 
 ### 功能
 
-- 处理会话信息：如果 cookie 中包含会话ID（字段为 `sid`），则会将会话ID转发给认证服务获取对应的身份信息，然后传递给业务逻辑层。
+- 处理会话信息：如果 cookie 中包含会话ID（字段为 `sid`），则会将会话ID转发给认证服务获取对应的身份信息，然后传递给业务逻辑层。**新增：如果请求头中包含 `X-SID` 字段，则会优先使用请求头中的值，实现更灵活的内部服务请求。**
 
 - 解析 JWT 凭证：如果 `header` 中包含字段 `Authorization`，且符合 [`Bearer <token>`](https://swagger.io/docs/specification/authentication/bearer-authentication/) 格式 ，则会对其进行 JWT 解码，然后传递给业务逻辑层。
 
